@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EIDOLON</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Michroma&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --c: rgba(0,220,195,1);
+  --cd: rgba(0,180,160,0.5);
+  --bg: #00050a;
+}
+body {
+  background: var(--bg);
+  overflow: hidden;
+  width: 100vw; height: 100vh;
+  cursor: none;
+}
+canvas { display: block; position: absolute; top:0; left:0; }
+#ui {
+  position: fixed; top:0; left:0;
+  width:100%; height:100%;
+  pointer-events: none;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--cd);
+}
+#title {
+  position: absolute;
+  top: 38px; left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Michroma', sans-serif;
+  font-size: 12px;
+  letter-spacing: 22px;
+  text-indent: 22px;
+  color: rgba(0,220,195,0.35);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+#sub {
+  position: absolute;
+  top: 64px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  letter-spacing: 6px;
+  text-indent: 6px;
+  color: rgba(0,180,160,0.2);
+  white-space: nowrap;
+}
+.hud { position: absolute; line-height: 2.4; }
+#htl { top:18px; left:18px; }
+#htr { top:18px; right:18px; text-align:right; }
+#hbl { bottom:18px; left:18px; }
+#hbr { bottom:18px; right:18px; text-align:right; }
+
+.crn {
+  position: absolute;
+  width: 36px; height: 36px;
+  border-color: rgba(0,200,180,0.25);
+  border-style: solid;
+}
+.ctL { top:10px; left:10px; border-width: 1px 0 0 1px; }
+.ctR { top:10px; right:10px; border-width: 1px 1px 0 0; }
+.cbL { bottom:10px; left:10px; border-width: 0 0 1px 1px; }
+.cbR { bottom:10px; right:10px; border-width: 0 1px 1px 0; }
+
+#cursor {
+  position: fixed;
+  pointer-events: none;
+  z-index: 200;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes flicker {
+  0%,100% { opacity:0.35; }
+  92% { opacity:0.35; }
+  93% { opacity:0.1; }
+  94% { opacity:0.35; }
+  96% { opacity:0.05; }
+  97% { opacity:0.35; }
+}
+#title { animation: flicker 8s infinite; }
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+<canvas id="c"></canvas>
+
+<div id="ui">
+  <div id="title">EIDOLON</div>
+  <div id="sub">MORPHIC INTELLIGENCE · CLASS Ω</div>
+
+  <div class="crn ctL"></div>
+  <div class="crn ctR"></div>
+  <div class="crn cbL"></div>
+  <div class="crn cbR"></div>
+
+  <div class="hud" id="htl">
+    <div id="h-pos">CURSOR ── 0.000 / 0.000</div>
+    <div id="h-frq">PULSE ─── 0.000 Hz</div>
+    <div id="h-ent">ENTITY ── DORMANT</div>
+    <div id="h-int">INTEGRITY 100%</div>
+  </div>
+  <div class="hud" id="htr">
+    <div>MORPH ENGINE v3.1</div>
+    <div>RINGS ──── 12</div>
+    <div>SEGS ───── 40</div>
+    <div id="h-shk">SHOCKWAVE ── 0</div>
+  </div>
+  <div class="hud" id="hbl">
+    <div>CLICK ── SHOCKWAVE</div>
+    <div>HOVER ── GRAVITY PULL</div>
+  </div>
+  <div class="hud" id="hbr">
+    <div id="h-frm">FRAME ── 0000</div>
+    <div id="h-tim">TIME ─── 0.000s</div>
+    <div>STATUS ── ONLINE</div>
+  </div>
+</div>
+
+<!-- Custom cursor: diamond shape -->
+<svg id="cursor" width="20" height="20" viewBox="-10 -10 20 20">
+  <polygon points="0,-8 6,0 0,8 -6,0" fill="none" stroke="rgba(0,220,195,0.8)" stroke-width="1"/>
+  <polygon points="0,-3 3,0 0,3 -3,0" fill="rgba(0,220,195,0.4)" stroke="none"/>
+</svg>
+
+<script>
+// ─── SETUP ───────────────────────────────────────────────────────────────────
+const bgc  = document.getElementById('bg');
+const bgx  = bgc.getContext('2d');
+const cv   = document.getElementById('c');
+const ctx  = cv.getContext('2d');
+const cur  = document.getElementById('cursor');
+
+let W, H, CX, CY;
+function resize() {
+  W = bgc.width = cv.width = window.innerWidth;
+  H = bgc.height = cv.height = window.innerHeight;
+  CX = W / 2; CY = H / 2;
+  drawGrid();
+}
+
+function drawGrid() {
+  bgx.clearRect(0,0,W,H);
+  bgx.strokeStyle = 'rgba(0,180,160,0.035)';
+  bgx.lineWidth = 1;
+  const step = 60;
+  for(let x = 0; x < W; x += step) {
+    bgx.beginPath(); bgx.moveTo(x,0); bgx.lineTo(x,H); bgx.stroke();
+  }
+  for(let y = 0; y < H; y += step) {
+    bgx.beginPath(); bgx.moveTo(0,y); bgx.lineTo(W,y); bgx.stroke();
+  }
+}
+
+resize();
+window.addEventListener('resize', resize);
+
+// ─── MOUSE ───────────────────────────────────────────────────────────────────
+const M = { x: CX, y: CY, active: false };
+window.addEventListener('mousemove', e => {
+  M.x = e.clientX; M.y = e.clientY; M.active = true;
+  cur.style.left = M.x + 'px';
+  cur.style.top  = M.y + 'px';
+});
+
+// ─── SHOCKWAVES ──────────────────────────────────────────────────────────────
+const SWS = [];
+window.addEventListener('click', e => {
+  SWS.push({ x: e.clientX, y: e.clientY, r: 0, life: 1.0 });
+});
+
+// ─── NOISE ───────────────────────────────────────────────────────────────────
+function n2(x, y, t) {
+  return (
+    Math.sin(x * 2.1 + t * 0.9) * Math.cos(y * 1.7 - t * 0.6) * 0.42 +
+    Math.sin(x * 0.8 - y * 2.4 + t * 1.3) * 0.30 +
+    Math.cos(x * 3.5 + y * 1.0 - t * 0.8) * 0.18 +
+    Math.sin(y * 1.4 - x * 0.6 + t * 0.4) * 0.10
+  );
+}
+
+// Spike noise — creates sharp protrusions
+function snoise(angle, t) {
+  const v = Math.sin(angle * 3 + t * 0.6) * Math.sin(angle * 8 - t * 1.4)
+           * Math.cos(angle * 5 + t * 0.9);
+  return Math.max(0, v * v * v * v) * 1.4;
+}
+
+// ─── ENTITY CONFIG ───────────────────────────────────────────────────────────
+const RINGS = 12;
+const SEGS  = 40;
+function baseR(r) {
+  return Math.pow((r + 1) / RINGS, 0.75) * Math.min(W, H) * 0.36;
+}
+
+// ─── PARTICLES ───────────────────────────────────────────────────────────────
+const PARTS = [];
+function spawnP(x, y, depth) {
+  if (PARTS.length > 400) return;
+  const a = Math.random() * Math.PI * 2;
+  const s = 0.4 + Math.random() * 2.5;
+  PARTS.push({
+    x, y,
+    vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+    life: 1, decay: 0.008 + Math.random() * 0.018,
+    size: 0.8 + Math.random() * 2.2,
+    depth
+  });
+}
+
+// ─── TRAILS ──────────────────────────────────────────────────────────────────
+const TRAIL = [];
+window.addEventListener('mousemove', () => {
+  TRAIL.push({ x: M.x, y: M.y, life: 1 });
+  if (TRAIL.length > 18) TRAIL.shift();
+});
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function lerp(a, b, t) { return a + (b - a) * t; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+function facetColor(depth, noise, alpha) {
+  const r = clamp(Math.round(lerp(160, 0,   depth) + noise * 40), 0, 255);
+  const g = clamp(Math.round(lerp(255, 80,  depth) + noise * 30), 0, 255);
+  const b = clamp(Math.round(lerp(240, 140, depth) + noise * 50), 0, 255);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function diamond(ctx, x, y, s) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - s);
+  ctx.lineTo(x + s * 0.65, y);
+  ctx.lineTo(x, y + s);
+  ctx.lineTo(x - s * 0.65, y);
+  ctx.closePath();
+}
+
+// Irregular polygon (not circle) for shockwave
+function polyRing(ctx, x, y, r, pts, jitter) {
+  ctx.beginPath();
+  for (let i = 0; i < pts; i++) {
+    const a = (i / pts) * Math.PI * 2;
+    const rr = r * (1 + (Math.random() - 0.5) * jitter);
+    const px = x + Math.cos(a) * rr;
+    const py = y + Math.sin(a) * rr;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+// ─── MAIN LOOP ────────────────────────────────────────────────────────────────
+let frame = 0;
+const T0 = Date.now();
+
+function draw() {
+  const t = (Date.now() - T0) * 0.001;
+  frame++;
+
+  // Fade trail
+  ctx.fillStyle = 'rgba(0,5,10,0.18)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Mouse trail
+  for (let i = 0; i < TRAIL.length; i++) {
+    TRAIL[i].life -= 0.06;
+    const tl = TRAIL[i];
+    if (tl.life <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha = tl.life * 0.25;
+    ctx.fillStyle = 'rgba(0,220,195,1)';
+    diamond(ctx, tl.x, tl.y, tl.life * 3);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Build vertices ─────────────────────────────────────────────────────────
+  const verts = [];
+  const MI_R = 220; // mouse influence radius
+
+  for (let r = 0; r < RINGS; r++) {
+    const ring = [];
+    for (let s = 0; s < SEGS; s++) {
+      const angle = (s / SEGS) * Math.PI * 2;
+      const BR = baseR(r);
+
+      // Organic noise displacement
+      const nx = Math.cos(angle) * (r + 1) * 0.45;
+      const ny = Math.sin(angle) * (r + 1) * 0.45;
+      const noiseVal = n2(nx, ny, t);
+      const noiseFactor = 0.28 - r * 0.012;
+      // Spike protrusions (only outer half of rings)
+      const spike = r > RINGS * 0.4 ? snoise(angle, t) * BR * 0.45 : 0;
+      const displaced = BR + noiseVal * BR * noiseFactor + spike;
+
+      let vx = CX + Math.cos(angle) * displaced;
+      let vy = CY + Math.sin(angle) * displaced;
+
+      // Mouse gravity pull
+      const dx = vx - M.x, dy = vy - M.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < MI_R && M.active) {
+        const force = Math.pow(1 - dist / MI_R, 2) * 80;
+        vx -= (dx / dist) * force;
+        vy -= (dy / dist) * force;
+      }
+
+      // Shockwave ripple
+      for (const sw of SWS) {
+        const sdx = vx - sw.x, sdy = vy - sw.y;
+        const sd = Math.sqrt(sdx * sdx + sdy * sdy);
+        const ripple = Math.exp(-Math.pow(sd - sw.r, 2) / 1800) * sw.life * 55;
+        if (sd > 0) { vx += (sdx / sd) * ripple; vy += (sdy / sd) * ripple; }
+      }
+
+      ring.push({ x: vx, y: vy, depth: r / (RINGS - 1), noise: noiseVal, angle });
+    }
+    verts.push(ring);
+  }
+
+  // ── Ambient glow ─────────────────────────────────────────────────────────
+  const outerR = baseR(RINGS - 1);
+  const grd = ctx.createRadialGradient(CX, CY, 0, CX, CY, outerR * 1.4);
+  grd.addColorStop(0,   'rgba(0,200,180,0.05)');
+  grd.addColorStop(0.5, 'rgba(0,120,110,0.02)');
+  grd.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Draw facets (outer → inner) ──────────────────────────────────────────
+  for (let r = RINGS - 2; r >= 0; r--) {
+    for (let s = 0; s < SEGS; s++) {
+      const sn = (s + 1) % SEGS;
+      const v00 = verts[r][s],   v01 = verts[r][sn];
+      const v10 = verts[r+1][s], v11 = verts[r+1][sn];
+
+      const ad = (v00.depth + v01.depth + v10.depth + v11.depth) * 0.25;
+      const an = (v00.noise + v01.noise + v10.noise + v11.noise) * 0.25;
+      const nv = an * 0.5 + 0.5; // 0..1
+
+      const edgeAlpha  = lerp(0.55, 0.05, ad) * (1 + nv * 0.4);
+      const fillAlpha  = lerp(0.18, 0.01, ad) * (1 + nv * 0.6);
+
+      [[v00,v01,v10],[v01,v11,v10]].forEach(tri => {
+        ctx.beginPath();
+        ctx.moveTo(tri[0].x, tri[0].y);
+        ctx.lineTo(tri[1].x, tri[1].y);
+        ctx.lineTo(tri[2].x, tri[2].y);
+        ctx.closePath();
+        ctx.fillStyle   = facetColor(ad, nv, fillAlpha);
+        ctx.fill();
+        ctx.strokeStyle = facetColor(ad, nv * 0.7, edgeAlpha);
+        ctx.lineWidth   = 0.5;
+        ctx.stroke();
+      });
+
+      // Particle spawn from disturbed outer ring
+      if (r === RINGS - 2 && Math.random() < 0.003) {
+        spawnP(v10.x, v10.y, ad);
+      }
+    }
+  }
+
+  // ── Core glow (angular polygon) ──────────────────────────────────────────
+  const coreR = baseR(0) * (1.2 + n2(0.1, 0.2, t * 1.5) * 0.4);
+  const cPts = 10;
+  ctx.save();
+
+  // Outer glow pass
+  ctx.shadowColor = 'rgba(0,220,195,0.8)';
+  ctx.shadowBlur = 40;
+  ctx.fillStyle = 'rgba(0,220,195,0.12)';
+  ctx.beginPath();
+  for (let i = 0; i < cPts; i++) {
+    const a = (i / cPts) * Math.PI * 2;
+    const rr = coreR * (0.85 + n2(Math.cos(a), Math.sin(a), t * 2) * 0.4);
+    i === 0 ? ctx.moveTo(CX + Math.cos(a)*rr, CY + Math.sin(a)*rr)
+            : ctx.lineTo(CX + Math.cos(a)*rr, CY + Math.sin(a)*rr);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // Inner bright core
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = 'rgba(180,255,245,1)';
+  const innerR = coreR * 0.4;
+  ctx.fillStyle = 'rgba(200,255,250,0.7)';
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const rr = innerR * (0.9 + n2(Math.cos(a)*2, Math.sin(a)*2, t * 3) * 0.2);
+    i === 0 ? ctx.moveTo(CX + Math.cos(a)*rr, CY + Math.sin(a)*rr)
+            : ctx.lineTo(CX + Math.cos(a)*rr, CY + Math.sin(a)*rr);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // ── Particles ─────────────────────────────────────────────────────────────
+  for (let i = PARTS.length - 1; i >= 0; i--) {
+    const p = PARTS[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vx *= 0.97; p.vy *= 0.97;
+    p.life -= p.decay;
+    if (p.life <= 0) { PARTS.splice(i,1); continue; }
+    ctx.save();
+    ctx.globalAlpha = p.life * 0.75;
+    ctx.fillStyle = `rgba(0,${clamp(Math.round(180 + p.depth*70),0,255)},${clamp(Math.round(165+p.depth*50),0,255)},1)`;
+    diamond(ctx, p.x, p.y, p.size * p.life);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Shockwaves ────────────────────────────────────────────────────────────
+  for (let i = SWS.length - 1; i >= 0; i--) {
+    const sw = SWS[i];
+    sw.r += 9;
+    sw.life -= 0.018;
+    if (sw.life <= 0) { SWS.splice(i,1); continue; }
+
+    ctx.save();
+    ctx.globalAlpha = sw.life * 0.6;
+    ctx.strokeStyle = 'rgba(0,220,195,1)';
+    ctx.lineWidth = 1;
+    ctx.shadowColor = 'rgba(0,220,195,0.8)';
+    ctx.shadowBlur = 8;
+    polyRing(ctx, sw.x, sw.y, sw.r, 32, 0.12);
+    ctx.stroke();
+    ctx.globalAlpha = sw.life * 0.2;
+    polyRing(ctx, sw.x, sw.y, sw.r * 0.7, 20, 0.2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── Scanlines ─────────────────────────────────────────────────────────────
+  ctx.save();
+  ctx.globalAlpha = 0.025;
+  ctx.fillStyle = '#000';
+  for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 2);
+  ctx.restore();
+
+  // ── Vignette ──────────────────────────────────────────────────────────────
+  const vig = ctx.createRadialGradient(CX, CY, Math.min(W,H)*0.25, CX, CY, Math.min(W,H)*0.85);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.75)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── HUD update ────────────────────────────────────────────────────────────
+  if (frame % 4 === 0) {
+    const px = ((M.x - CX) / CX).toFixed(3);
+    const py = ((M.y - CY) / CY).toFixed(3);
+    const hz = (Math.abs(n2(0.1, 0.2, t)) * 9.8 + 0.5).toFixed(3);
+    const state = M.active ? (SWS.length > 0 ? 'DISRUPTED' : 'ENGAGED') : 'DORMANT';
+    const integ = clamp(100 - SWS.length * 8, 60, 100);
+
+    document.getElementById('h-pos').textContent = `CURSOR ── ${px} / ${py}`;
+    document.getElementById('h-frq').textContent = `PULSE ─── ${hz} Hz`;
+    document.getElementById('h-ent').textContent = `ENTITY ── ${state}`;
+    document.getElementById('h-int').textContent = `INTEGRITY ${integ}%`;
+    document.getElementById('h-shk').textContent = `SHOCKWAVE ── ${SWS.length}`;
+    document.getElementById('h-frm').textContent = `FRAME ── ${String(frame).padStart(5,'0')}`;
+    document.getElementById('h-tim').textContent = `TIME ─── ${t.toFixed(3)}s`;
+  }
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
