@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>EIDOLON</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Michroma&display=swap" rel="stylesheet">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; }
 :root {
   --c: rgba(0,220,195,1);
   --cd: rgba(0,180,160,0.5);
@@ -15,10 +16,23 @@
 body {
   background: var(--bg);
   overflow: hidden;
-  width: 100vw; height: 100vh;
+  position: fixed;
+  inset: 0;
   cursor: none;
+  /* iOS / iPadOS: bloquea scroll, zoom, rubber-band y el menú contextual de pulsación larga */
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
-canvas { display: block; position: absolute; top:0; left:0; }
+canvas {
+  display: block;
+  position: absolute;
+  top: 0; left: 0;
+  touch-action: none;
+}
 #ui {
   position: fixed; top:0; left:0;
   width:100%; height:100%;
@@ -27,6 +41,8 @@ canvas { display: block; position: absolute; top:0; left:0; }
   font-size: 9px;
   letter-spacing: 2px;
   color: var(--cd);
+  /* respeta el notch / safe-area en iPhone */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 #title {
   position: absolute;
@@ -112,8 +128,8 @@ canvas { display: block; position: absolute; top:0; left:0; }
     <div id="h-shk">SHOCKWAVE ── 0</div>
   </div>
   <div class="hud" id="hbl">
-    <div>CLICK ── SHOCKWAVE</div>
-    <div>HOVER ── GRAVITY PULL</div>
+    <div id="h-act1">CLICK ── SHOCKWAVE</div>
+    <div id="h-act2">HOVER ── GRAVITY PULL</div>
   </div>
   <div class="hud" id="hbr">
     <div id="h-frm">FRAME ── 0000</div>
@@ -136,11 +152,24 @@ const cv   = document.getElementById('c');
 const ctx  = cv.getContext('2d');
 const cur  = document.getElementById('cursor');
 
-let W, H, CX, CY;
+let W, H, CX, CY, DPR;
 function resize() {
-  W = bgc.width = cv.width = window.innerWidth;
-  H = bgc.height = cv.height = window.innerHeight;
+  // Cap a 2x: en iPhone/iPad el devicePixelRatio es 3, demasiado para los facets + shadowBlur.
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
   CX = W / 2; CY = H / 2;
+
+  // Buffer en px físicos para nitidez retina; tamaño CSS en px lógicos.
+  bgc.width  = cv.width  = Math.round(W * DPR);
+  bgc.height = cv.height = Math.round(H * DPR);
+  bgc.style.width  = cv.style.width  = W + 'px';
+  bgc.style.height = cv.style.height = H + 'px';
+
+  // Todo el dibujo trabaja en px lógicos (coinciden con clientX/clientY).
+  bgx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
   drawGrid();
 }
 
@@ -159,20 +188,68 @@ function drawGrid() {
 
 resize();
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+// iOS dispara este evento al mostrar/ocultar la barra de Safari.
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 
-// ─── MOUSE ───────────────────────────────────────────────────────────────────
-const M = { x: CX, y: CY, active: false };
-window.addEventListener('mousemove', e => {
-  M.x = e.clientX; M.y = e.clientY; M.active = true;
-  cur.style.left = M.x + 'px';
-  cur.style.top  = M.y + 'px';
-});
+// ─── POINTER (mouse + touch) ──────────────────────────────────────────────────
+const M     = { x: CX, y: CY, active: false };
+const SWS   = [];   // shockwaves
+const TRAIL = [];   // cursor trail
+let touchMode = false;
 
-// ─── SHOCKWAVES ──────────────────────────────────────────────────────────────
-const SWS = [];
-window.addEventListener('click', e => {
-  SWS.push({ x: e.clientX, y: e.clientY, r: 0, life: 1.0 });
-});
+function pushTrail(x, y) {
+  TRAIL.push({ x, y, life: 1 });
+  if (TRAIL.length > 18) TRAIL.shift();
+}
+
+function movePointer(x, y) {
+  M.x = x; M.y = y; M.active = true;
+  if (!touchMode) {           // el cursor SVG solo tiene sentido con ratón
+    cur.style.left = x + 'px';
+    cur.style.top  = y + 'px';
+  }
+  pushTrail(x, y);
+}
+
+function shockwave(x, y) {
+  SWS.push({ x, y, r: 0, life: 1.0 });
+}
+
+// — Escritorio (ratón) —
+window.addEventListener('mousemove', e => movePointer(e.clientX, e.clientY));
+window.addEventListener('click',     e => shockwave(e.clientX, e.clientY));
+
+// — Táctil: iPhone / iPad / Android —
+// passive:false nos deja bloquear scroll/zoom; preventDefault en touchstart evita
+// el "click fantasma" que iOS sintetiza (si no, saldría doble shockwave).
+function goTouch() {
+  if (touchMode) return;
+  touchMode = true;
+  cur.style.display = 'none';
+  // Ajusta los textos de ayuda al gesto táctil.
+  const a1 = document.getElementById('h-act1');
+  const a2 = document.getElementById('h-act2');
+  if (a1) a1.textContent = 'TAP ─── SHOCKWAVE';
+  if (a2) a2.textContent = 'DRAG ── GRAVITY PULL';
+}
+
+window.addEventListener('touchstart', e => {
+  goTouch();
+  const t = e.changedTouches[0];
+  movePointer(t.clientX, t.clientY);
+  shockwave(t.clientX, t.clientY);
+  e.preventDefault();
+}, { passive: false });
+
+window.addEventListener('touchmove', e => {
+  const t = e.changedTouches[0];
+  movePointer(t.clientX, t.clientY);
+  e.preventDefault();
+}, { passive: false });
+
+window.addEventListener('touchend',   e => { e.preventDefault(); }, { passive: false });
+window.addEventListener('touchcancel', e => { e.preventDefault(); }, { passive: false });
 
 // ─── NOISE ───────────────────────────────────────────────────────────────────
 function n2(x, y, t) {
@@ -212,13 +289,6 @@ function spawnP(x, y, depth) {
     depth
   });
 }
-
-// ─── TRAILS ──────────────────────────────────────────────────────────────────
-const TRAIL = [];
-window.addEventListener('mousemove', () => {
-  TRAIL.push({ x: M.x, y: M.y, life: 1 });
-  if (TRAIL.length > 18) TRAIL.shift();
-});
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function lerp(a, b, t) { return a + (b - a) * t; }
